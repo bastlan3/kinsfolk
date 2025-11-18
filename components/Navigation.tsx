@@ -1,13 +1,14 @@
 import React from 'react';
 import { View } from '../types';
-import { Home, Image, MessageCircle, Users, Palette, Camera } from 'lucide-react';
+import { Home, Image, MessageCircle, Users, Palette, Camera, Settings } from 'lucide-react';
 
 interface NavigationProps {
   currentView: View;
   setView: (view: View) => void;
+  onOpenSettings: () => void;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) => {
+export const Navigation: React.FC<NavigationProps> = ({ currentView, setView, onOpenSettings }) => {
   const navItems = [
     { id: View.DASHBOARD, label: 'Garden', icon: Home },
     { id: View.CAPSULE, label: 'Capsule', icon: Camera },
@@ -45,9 +46,26 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) 
             </button>
           );
         })}
+        
+        {/* Mobile Settings Icon (hidden on desktop, it fits better in bottom bar) */}
+        <button
+          onClick={onOpenSettings}
+          className="md:hidden flex flex-col items-center text-stone-400 hover:text-stone-600"
+        >
+          <Settings className="w-6 h-6 mb-1" />
+          <span className="text-xs font-medium">Config</span>
+        </button>
       </div>
       
-      <div className="hidden md:block mt-auto px-4 pb-4">
+      <div className="hidden md:block mt-auto px-4 pb-4 w-full">
+        <button 
+          onClick={onOpenSettings}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-stone-500 hover:bg-stone-50 hover:text-stone-800 transition-colors mb-4"
+        >
+          <Settings className="w-5 h-5" />
+          <span className="text-sm font-medium">Settings</span>
+        </button>
+
         <div className="bg-stone-100 rounded-lg p-3">
           <p className="text-xs text-stone-500 font-medium">Next Unlock</p>
           <p className="text-sm font-bold text-stone-800">2 Days left</p>

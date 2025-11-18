@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { generateCreativeImage } from '../services/geminiService';
-import { Wand2, Loader2, Download, Plus } from 'lucide-react';
+import { Wand2, Loader2, Download, Plus, AlertCircle } from 'lucide-react';
 
 interface CreativeStudioProps {
   onSaveToCapsule: (imageUrl: string) => void;
@@ -21,8 +21,12 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({ onSaveToCapsule 
     try {
       const imageUrl = await generateCreativeImage(prompt);
       setGeneratedImage(imageUrl);
-    } catch (err) {
-      setError("Failed to create image. Please try a different prompt.");
+    } catch (err: any) {
+      if (err.message === "MISSING_API_KEY") {
+        setError("Gemini API Key missing. Please add it in Settings.");
+      } else {
+        setError("Failed to create image. Please try a different prompt.");
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -79,7 +83,12 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({ onSaveToCapsule 
 
         {/* Input Area */}
         <div className="space-y-4">
-           {error && <p className="text-red-500 text-sm px-2">{error}</p>}
+           {error && (
+             <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 p-3 rounded-xl">
+                <AlertCircle size={16} />
+                {error}
+             </div>
+           )}
            
            <div className="flex gap-2">
              <input 

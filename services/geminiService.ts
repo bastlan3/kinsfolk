@@ -1,8 +1,35 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
-// Initialize the client. 
-// Note: In a production app, ensure API_KEY is securely handled.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getApiKey = (): string | undefined => {
+  // 1. Check Local Storage (User entered)
+  const storedKey = localStorage.getItem('gemini_api_key');
+  if (storedKey) return storedKey;
+
+  // 2. Check Environment Variable (safely for browser)
+  // @ts-ignore
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    // @ts-ignore
+    return process.env.API_KEY;
+  }
+
+  return undefined;
+};
+
+export const hasApiKey = (): boolean => {
+  return !!getApiKey();
+};
+
+export const setUserApiKey = (key: string) => {
+  localStorage.setItem('gemini_api_key', key);
+};
+
+const getClient = () => {
+  const key = getApiKey();
+  if (!key) {
+    throw new Error("MISSING_API_KEY");
+  }
+  return new GoogleGenAI({ apiKey: key });
+};
 
 /**
  * Generates a chat response using gemini-3-pro-preview
@@ -12,6 +39,7 @@ export const generateChatResponse = async (
   message: string
 ): Promise<string> => {
   try {
+    const ai = getClient();
     const chat = ai.chats.create({
       model: 'gemini-3-pro-preview',
       history: history,
@@ -23,8 +51,11 @@ export const generateChatResponse = async (
 
     const result: GenerateContentResponse = await chat.sendMessage({ message });
     return result.text || "I'm having trouble finding the right words right now.";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Chat Error:", error);
+    if (error.message === "MISSING_API_KEY") {
+      throw error;
+    }
     throw new Error("Failed to generate chat response.");
   }
 };
@@ -34,6 +65,7 @@ export const generateChatResponse = async (
  */
 export const generateCreativeImage = async (prompt: string): Promise<string> => {
   try {
+    const ai = getClient();
     const response = await ai.models.generateImages({
       model: 'imagen-4.0-generate-001',
       prompt: prompt,
@@ -49,8 +81,11 @@ export const generateCreativeImage = async (prompt: string): Promise<string> => 
       return `data:image/jpeg;base64,${base64ImageBytes}`;
     }
     throw new Error("No image generated");
-  } catch (error) {
+  } catch (error: any) {
     console.error("Image Gen Error:", error);
+    if (error.message === "MISSING_API_KEY") {
+      throw error;
+    }
     throw new Error("Failed to generate image.");
   }
 };

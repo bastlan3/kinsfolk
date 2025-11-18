@@ -6,9 +6,11 @@ import { CapsuleBuilder } from './components/CapsuleBuilder';
 import { CreativeStudio } from './components/CreativeStudio';
 import { ChatBot } from './components/ChatBot';
 import { FamilyHub } from './components/FamilyHub';
+import { SettingsModal } from './components/SettingsModal';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [stats, setStats] = useState<CapsuleStats>({
     streak: 4,
@@ -36,12 +38,6 @@ const App: React.FC = () => {
       author: 'You'
     };
     setPhotos(prev => [newPhoto, ...prev]);
-    // Switch to capsule view to see it added if not already there
-    if (currentView !== View.CAPSULE) {
-        // Optional: stay on dashboard or move to capsule. 
-        // Let's stay on dashboard if user dragged dropped, but standard input usually implies seeing it.
-        // For now, we just update state.
-    }
   };
 
   const addGeneratedPhoto = (url: string) => {
@@ -66,7 +62,7 @@ const App: React.FC = () => {
       case View.CAPSULE:
         return <CapsuleBuilder photos={photos} onAddPhoto={addPhoto} onRemovePhoto={removePhoto} />;
       case View.STUDIO:
-        return <CreativeStudio onSaveToCapsule={addGeneratedPhoto} />;
+        return <CreativeStudio onSaveToCapsule={addGeneratedPhoto} />
       case View.CHAT:
         return <ChatBot />;
       case View.FAMILY:
@@ -78,13 +74,19 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-[#fcfaf8] text-stone-800 font-sans">
-      <Navigation currentView={currentView} setView={setCurrentView} />
+      <Navigation 
+        currentView={currentView} 
+        setView={setCurrentView} 
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
       
       <main className="flex-1 p-6 pb-24 md:p-12 md:h-screen md:overflow-y-auto">
         <div className="max-w-5xl mx-auto h-full">
            {renderContent()}
         </div>
       </main>
+
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 };

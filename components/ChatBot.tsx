@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '../types';
 import { generateChatResponse } from '../services/geminiService';
-import { Send, MessageCircle, Bot, User as UserIcon, Loader2 } from 'lucide-react';
+import { Send, MessageCircle, Bot, User as UserIcon, Loader2, Key } from 'lucide-react';
 
 export const ChatBot: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -14,6 +14,7 @@ export const ChatBot: React.FC = () => {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [missingKey, setMissingKey] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -37,6 +38,7 @@ export const ChatBot: React.FC = () => {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
+    setMissingKey(false);
 
     try {
       // Transform messages for Gemini API history format
@@ -55,14 +57,23 @@ export const ChatBot: React.FC = () => {
       };
 
       setMessages(prev => [...prev, botMsg]);
-    } catch (error) {
-      // Handle error elegantly in chat
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        role: 'model',
-        text: "I'm having a little trouble connecting to the memory banks right now. Please try again in a moment.",
-        timestamp: Date.now()
-      }]);
+    } catch (error: any) {
+      if (error.message === "MISSING_API_KEY") {
+         setMissingKey(true);
+         setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            role: 'model',
+            text: "I need a Gemini API Key to chat! Please add one in the settings.",
+            timestamp: Date.now()
+         }]);
+      } else {
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'model',
+          text: "I'm having a little trouble connecting to the memory banks right now. Please try again in a moment.",
+          timestamp: Date.now()
+        }]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -112,7 +123,7 @@ export const ChatBot: React.FC = () => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Ask about photo ideas..."
+            placeholder={missingKey ? "Set API Key in settings to chat..." : "Ask about photo ideas..."}
             className="flex-1 bg-transparent outline-none text-stone-700 text-sm"
             disabled={isLoading}
           />
