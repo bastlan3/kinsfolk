@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Key, Save, ExternalLink } from 'lucide-react';
-import { setUserApiKey, hasApiKey } from '../services/geminiService';
+import { X, Key, Save, ExternalLink, Trash2 } from 'lucide-react';
+import { setUserApiKey, removeUserApiKey } from '../services/geminiService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   useEffect(() => {
     const stored = localStorage.getItem('gemini_api_key');
     if (stored) setKey(stored);
+    else setKey('');
   }, [isOpen]);
 
   const handleSave = () => {
@@ -25,6 +26,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         onClose();
       }, 1000);
     }
+  };
+
+  const handleRemove = () => {
+    removeUserApiKey();
+    setKey('');
+    onClose();
   };
 
   if (!isOpen) return null;
@@ -69,16 +76,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <p className="mb-2"><strong>Privacy Note:</strong> Your API key is stored locally on your device. It is never sent to any server other than Google's Gemini API.</p>
           </div>
 
-          <button 
-            onClick={handleSave}
-            className={`w-full py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-all ${
-              saved 
-                ? 'bg-green-600 text-white' 
-                : 'bg-stone-900 text-white hover:bg-stone-800'
-            }`}
-          >
-            {saved ? <><CheckIcon /> Saved</> : <><Save size={18} /> Save Settings</>}
-          </button>
+          <div className="flex gap-3">
+            {key && (
+              <button 
+                onClick={handleRemove}
+                className="px-4 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-all bg-red-50 text-red-600 hover:bg-red-100"
+                title="Remove API Key"
+              >
+                <Trash2 size={18} />
+              </button>
+            )}
+            <button 
+              onClick={handleSave}
+              className={`flex-1 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-all ${
+                saved 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-stone-900 text-white hover:bg-stone-800'
+              }`}
+            >
+              {saved ? <><CheckIcon /> Saved</> : <><Save size={18} /> Save Settings</>}
+            </button>
+          </div>
         </div>
       </div>
     </div>

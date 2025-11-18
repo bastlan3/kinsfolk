@@ -1,15 +1,59 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
+// Helper for safe local storage access (prevents crash in private mode)
+const safeGetItem = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    return null;
+  }
+};
+
+const safeSetItem = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    // storage unavailable
+  }
+};
+
+const safeRemoveItem = (key: string) => {
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {
+    // storage unavailable
+  }
+};
+
 const getApiKey = (): string | undefined => {
   // 1. Check Local Storage (User entered)
-  const storedKey = localStorage.getItem('gemini_api_key');
+  const storedKey = safeGetItem('gemini_api_key');
   if (storedKey) return storedKey;
 
-  // 2. Check Environment Variable (safely for browser)
-  // @ts-ignore
-  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+  // 2. Check Environment Variables (Vite/Browser standard)
+  try {
     // @ts-ignore
-    return process.env.API_KEY;
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      // @ts-ignore
+      if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
+      // @ts-ignore
+      if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  // 3. Check Process Env (Node/Webpack standard)
+  try {
+    // @ts-ignore
+    if (typeof process !== 'undefined' && process.env) {
+      // @ts-ignore
+      if (process.env.API_KEY) return process.env.API_KEY;
+      // @ts-ignore
+      if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
+    }
+  } catch (e) {
+    // ignore
   }
 
   return undefined;
@@ -20,7 +64,11 @@ export const hasApiKey = (): boolean => {
 };
 
 export const setUserApiKey = (key: string) => {
-  localStorage.setItem('gemini_api_key', key);
+  safeSetItem('gemini_api_key', key);
+};
+
+export const removeUserApiKey = () => {
+  safeRemoveItem('gemini_api_key');
 };
 
 const getClient = () => {
