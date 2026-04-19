@@ -1,34 +1,49 @@
-# Kinsfolk configuration — the only file you need to edit.
-#
-# After editing, also set two GitHub Actions secrets on the repo:
+# Kinsfolk configuration. After editing, set two GitHub Actions secrets:
 #   TELEGRAM_BOT_TOKEN   from @BotFather on Telegram
 #   RESEND_API_KEY       from https://resend.com/api-keys
 
 timezone: Europe/Paris
-
-# Daily cutoff for "today's photo" (local time). A photo that arrives after
-# this hour is still accepted, but the miss check at the next morning will
-# treat the day as missed if nothing landed before this hour.
 daily_deadline_hour: 20
 
-# People allowed to submit. Get a Telegram ID by messaging @userinfobot.
-# The bot will ignore messages from anyone not in this list.
-contributors:
-  - name: "CHANGE_ME"
-    telegram_id: 0
-  # - name: "Alice"
-  #   telegram_id: 123456789
+# If true, every photo with GPS metadata is reverse-geocoded to "City, Country"
+# via OpenStreetMap's Nominatim service during ingest. Set false to keep
+# coordinates 100% local (photos still get saved, no location label appears).
+#
+# Note: Telegram STRIPS EXIF from photos sent as "photo". To keep GPS, send
+# the image as a file attachment instead (📎 → File → pick the image).
+reverse_geocode: true
 
-# Family members who receive the monthly journal email.
-receivers:
-  - "CHANGE_ME@example.com"
-  # - "grandma@example.com"
+# Defaults applied to every group unless the group overrides them.
+defaults:
+  journal:
+    from_name: "Kinsfolk"
+    from_email: "onboarding@resend.dev"
+    reply_to: ""
+    # Available tokens: {group_name} {month_name} {year}
+    subject_template: "Kinsfolk — {group_name} — {month_name} {year}"
 
-journal:
-  # "From" header for the monthly email.
-  # Use onboarding@resend.dev until you verify your own sender domain.
-  from_name: "Kinsfolk"
-  from_email: "onboarding@resend.dev"
-  # Reply-To lets receivers reply to a real person.
-  reply_to: ""
-  subject_template: "Kinsfolk — {month_name} {year}"
+# A capsule = a contributor list + a receiver list. One monthly email per group.
+# A single photo DMed to the bot is copied into every group its sender belongs to.
+# Telegram IDs can appear in multiple groups (that's the point).
+groups:
+  - id: maternal
+    name: "My parents"
+    contributors:
+      - name: "CHANGE_ME"
+        telegram_id: 0
+      # - name: "Sister"
+      #   telegram_id: 222
+    receivers:
+      - "CHANGE_ME@example.com"
+    # Per-group journal overrides are optional — inherit defaults if omitted.
+    # journal:
+    #   subject_template: "For Mom & Dad — {month_name} {year}"
+
+  # Uncomment and edit to add a second capsule:
+  # - id: partner
+  #   name: "Laura's parents"
+  #   contributors:
+  #     - { name: "Me", telegram_id: 111 }
+  #     - { name: "Laura", telegram_id: 333 }
+  #   receivers:
+  #     - "laurasmom@example.com"

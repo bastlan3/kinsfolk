@@ -3,6 +3,7 @@ import type { MonthEntry } from "./storage.ts";
 import type { Attachment } from "./mail.ts";
 import { daysInMonth, monthName } from "./time.ts";
 import type { Contributor } from "./config.ts";
+import { formatLocation } from "./exif.ts";
 
 export interface BuiltJournal {
   subject: string;
@@ -13,35 +14,35 @@ export interface BuiltJournal {
 export interface BuildJournalInput {
   year: number;
   month: number;
+  groupName: string;
   entries: MonthEntry[];
   contributors: Contributor[];
   subject_template: string;
 }
 
-// Produces an HTML email with all days of the month listed in order. Each
-// photo is referenced via a cid: attachment so it renders inline across
-// every mainstream mail client (Gmail, Apple Mail, Outlook).
+// Produces an HTML email with all days of the month listed in order. Photos
+// reference their attachment via cid: so they render inline across Gmail,
+// Apple Mail, and Outlook.
 export function buildJournal(input: BuildJournalInput): BuiltJournal {
-  const { year, month, entries, contributors, subject_template } = input;
+  const { year, month, groupName, entries, contributors, subject_template } = input;
   const totalDays = daysInMonth(year, month);
   const mName = monthName(month);
 
   const subject = subject_template
     .replaceAll("{month_name}", mName)
-    .replaceAll("{year}", String(year));
+    .replaceAll("{year}", String(year))
+    .replaceAll("{group_name}", groupName);
 
   const attachments: Attachment[] = [];
   const perDay = groupByDay(entries);
 
-  // Miss-count per contributor for the summary.
   const expectedDays = Array.from({ length: totalDays }, (_, i) => i + 1);
   const missSummary: { name: string; posted: number; missed: number }[] = [];
   for (const c of contributors) {
     const slug = slugFor(c.name);
     let posted = 0;
     for (const d of expectedDays) {
-      const key = dayKey(d);
-      const dayEntries = perDay.get(key) ?? [];
+      const dayEntries = perDay.get(pad2(d)) ?? [];
       if (dayEntries.some((e) => e.contributor === slug)) posted++;
     }
     missSummary.push({ name: c.name, posted, missed: totalDays - posted });
@@ -49,8 +50,7 @@ export function buildJournal(input: BuildJournalInput): BuiltJournal {
 
   const dayBlocks: string[] = [];
   for (const d of expectedDays) {
-    const key = dayKey(d);
-    const dayEntries = perDay.get(key) ?? [];
+    const dayEntries = perDay.get(pad2(d)) ?? [];
     if (dayEntries.length === 0) {
       dayBlocks.push(renderEmptyDay(year, month, d));
       continue;
@@ -66,12 +66,14 @@ export function buildJournal(input: BuildJournalInput): BuiltJournal {
         content_id: cid,
       });
       const contribName = displayName(contributors, e.contributor);
-      imgs.push(renderPhoto(cid, contribName, e.caption));
+      const locationLabel = formatLocation(e.location);
+      imgs.push(renderPhoto(cid, contribName, e.caption, locationLabel));
     }
     dayBlocks.push(renderDay(year, month, d, imgs.join("")));
   }
 
   const html = renderDocument({
+    groupName,
     mName,
     year,
     totalDays,
@@ -87,10 +89,6 @@ export function buildJournal(input: BuildJournalInput): BuiltJournal {
 
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
-}
-
-function dayKey(d: number): string {
-  return pad2(d);
 }
 
 function groupByDay(entries: MonthEntry[]): Map<string, MonthEntry[]> {
@@ -126,6 +124,7 @@ function escape(s: string): string {
 // ---- rendering ----
 
 function renderDocument(p: {
+  groupName: string;
   mName: string;
   year: number;
   totalDays: number;
@@ -143,13 +142,13 @@ function renderDocument(p: {
     .join("");
 
   return `<!doctype html>
-<html><head><meta charset="utf-8"><title>Kinsfolk — ${p.mName} ${p.year}</title></head>
+<html><head><meta charset="utf-8"><title>Kinsfolk — ${escape(p.groupName)} — ${p.mName} ${p.year}</title></head>
 <body style="margin:0;padding:0;background:#f7f5f1;font-family:Georgia,'Times New Roman',serif;color:#2a2a2a;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f5f1;">
     <tr><td align="center">
       <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#ffffff;margin:24px 0;border:1px solid #e6e2da;">
         <tr><td style="padding:40px 40px 24px 40px;text-align:center;border-bottom:1px solid #e6e2da;">
-          <div style="font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#8a7a5a;">Kinsfolk</div>
+          <div style="font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#8a7a5a;">Kinsfolk · ${escape(p.groupName)}</div>
           <h1 style="margin:12px 0 4px 0;font-size:32px;font-weight:normal;">${p.mName} ${p.year}</h1>
           <div style="color:#888;font-size:14px;">${p.totalPhotos} photo${p.totalPhotos === 1 ? "" : "s"} across ${p.totalDays} days</div>
         </td></tr>
@@ -183,15 +182,19 @@ function renderEmptyDay(year: number, month: number, day: number): string {
   </div>`;
 }
 
-function renderPhoto(cid: string, who: string, caption: string): string {
+function renderPhoto(cid: string, who: string, caption: string, locationLabel: string | null): string {
   const cap = caption.trim();
   const capHtml = cap
     ? `<div style="margin-top:8px;font-style:italic;color:#555;font-size:15px;line-height:1.5;">${escape(cap)}</div>`
+    : "";
+  const locHtml = locationLabel
+    ? `<div style="margin-top:6px;font-size:13px;color:#6b5e44;">📍 ${escape(locationLabel)}</div>`
     : "";
   const byline = `<div style="margin-top:4px;font-size:12px;color:#8a7a5a;">by ${escape(who)}</div>`;
   return `<div style="margin-bottom:20px;">
     <img src="cid:${cid}" alt="" style="display:block;width:100%;max-width:560px;height:auto;border:1px solid #e6e2da;" />
     ${capHtml}
+    ${locHtml}
     ${byline}
   </div>`;
 }

@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "exifr": "^7.1.3",
     "resend": "^4.0.1",
     "sharp": "^0.33.5",
     "yaml": "^2.6.1"

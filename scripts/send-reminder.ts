@@ -1,10 +1,13 @@
-// Runs hourly. If the Paris clock reads `daily_deadline_hour`, DM every
-// contributor who hasn't posted today yet. Dedup via reminders.json so
-// reruns in the same hour don't double-send.
+// Runs hourly. If Paris clock == daily_deadline_hour, DMs every contributor
+// who hasn't posted today to ANY group. Dedup via reminders.json.
+//
+// Broadcast model: one photo DMed to the bot lands in every capsule the
+// sender belongs to, so "posted today" is a per-person property — we don't
+// need per-group reminders.
 
-import { loadConfig, requireEnv } from "../src/config.ts";
+import { allContributors, loadConfig, requireEnv } from "../src/config.ts";
 import { localNow } from "../src/time.ts";
-import { loadReminders, loadSubmissions, safeSlug, saveReminders } from "../src/storage.ts";
+import { loadReminders, loadSubmissions, saveReminders } from "../src/storage.ts";
 import { Telegram } from "../src/telegram.ts";
 
 async function main(): Promise<void> {
@@ -17,17 +20,18 @@ async function main(): Promise<void> {
   }
 
   const today = now.dateString;
-  const submissions = loadSubmissions();
-  const postedSlugs = new Set(
-    submissions.filter((s) => s.date === today).map((s) => s.contributor),
+  const postedToday = new Set(
+    loadSubmissions()
+      .filter((s) => s.date === today)
+      .map((s) => s.telegram_id),
   );
 
   const reminders = loadReminders();
   const tg = new Telegram(requireEnv("TELEGRAM_BOT_TOKEN"));
 
   let sent = 0;
-  for (const c of cfg.contributors) {
-    if (postedSlugs.has(safeSlug(c.name))) continue;
+  for (const c of allContributors(cfg)) {
+    if (postedToday.has(c.telegram_id)) continue;
     const dedupKey = `${today}:${c.telegram_id}`;
     if (reminders.today_reminders[dedupKey]) continue;
 

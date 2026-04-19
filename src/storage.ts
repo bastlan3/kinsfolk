@@ -3,6 +3,14 @@ import { dirname, resolve, join } from "node:path";
 import { repoRoot } from "./config.ts";
 
 // ---- on-disk layout helpers ----
+//
+//   entries/<group_id>/YYYY/MM/DD/<contributor-slug>/001.jpg
+//   entries/<group_id>/YYYY/MM/DD/<contributor-slug>/caption.txt    (optional)
+//   entries/<group_id>/YYYY/MM/DD/<contributor-slug>/location.json  (optional)
+//
+// A single photo from a contributor in multiple groups lands as independent
+// copies under each group's directory, so every group is self-contained and
+// can be deleted/rebuilt without touching the others.
 
 export function entriesDir(): string {
   return resolve(process.env.KINSFOLK_ENTRIES_DIR ?? resolve(repoRoot(), "entries"));
@@ -14,10 +22,9 @@ export function stateDir(): string {
   return d;
 }
 
-export function dayDir(dateString: string, contributor: string): string {
-  // dateString = YYYY-MM-DD
+export function dayDir(groupId: string, dateString: string, contributor: string): string {
   const [y, m, d] = dateString.split("-");
-  return resolve(entriesDir(), y, m, d, safeSlug(contributor));
+  return resolve(entriesDir(), groupId, y, m, d, safeSlug(contributor));
 }
 
 export function safeSlug(name: string): string {
@@ -39,7 +46,6 @@ function writeJson(path: string, data: unknown): void {
   writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
 }
 
-// telegram-offset.json: { offset: number }
 export interface OffsetState {
   offset: number;
 }
@@ -51,13 +57,13 @@ export function saveOffset(s: OffsetState): void {
   writeJson(OFFSET_PATH(), s);
 }
 
-// submissions.json: flat list of every saved photo
 export interface Submission {
-  date: string;         // YYYY-MM-DD (contributor's local day at save time)
-  contributor: string;  // name as configured
+  group_id: string;
+  date: string;         // YYYY-MM-DD in contributor-local time at save time
+  contributor: string;  // slug
   telegram_id: number;
-  caption: string;      // "" if none
-  file_relpath: string; // "entries/2025/04/19/alice/001.jpg"
+  caption: string;
+  file_relpath: string; // "entries/maternal/2026/04/19/alice/001.jpg"
   received_at: string;  // ISO UTC
 }
 interface SubmissionState {
@@ -71,13 +77,20 @@ export function saveSubmissions(subs: Submission[]): void {
   writeJson(SUB_PATH(), { submissions: subs });
 }
 
-// reminders.json: tracks what we've already sent so we don't spam on hourly runs
+// Reminder keys:
+//   today_reminders:       "${date}:${telegram_id}"               (per-person-per-day)
+//   yesterday_escalations: "${date}:${telegram_id}"               (per-person-per-day)
+//   monthly_sent:          "${group_id}:${year}-${month}"         (per-group-per-month)
+//   monthly_alerts:        "${group_id}:${year}-${month}"         (per-group-per-month)
+//
+// Daily reminders are person-centric, not group-centric: a photo DMed once
+// broadcasts to every group the sender belongs to, so "posted today" is
+// meaningful at the person level.
 export interface ReminderState {
-  // key is `${date}:${telegram_id}`, value is ISO sent time
   today_reminders: Record<string, string>;
   yesterday_escalations: Record<string, string>;
-  monthly_sent: Record<string, string>;       // key is `${year}-${month}`
-  monthly_alerts: Record<string, string>;     // key is `${year}-${month}`, set when we flagged a missing send
+  monthly_sent: Record<string, string>;
+  monthly_alerts: Record<string, string>;
 }
 const REM_PATH = () => join(stateDir(), "reminders.json");
 export function loadReminders(): ReminderState {
@@ -93,39 +106,68 @@ export function saveReminders(s: ReminderState): void {
   writeJson(REM_PATH(), s);
 }
 
-// ---- enumerating entries ----
+// ---- location sidecar ----
+
+export interface LocationInfo {
+  lat: number;
+  lon: number;
+  city?: string;
+  country?: string;
+  fetched_at?: string; // ISO UTC when geocoding was last attempted
+}
+
+export function readLocation(dir: string): LocationInfo | null {
+  const p = join(dir, "location.json");
+  if (!existsSync(p)) return null;
+  try {
+    return JSON.parse(readFileSync(p, "utf8")) as LocationInfo;
+  } catch {
+    return null;
+  }
+}
+
+export function writeLocation(dir: string, loc: LocationInfo): void {
+  writeJson(join(dir, "location.json"), loc);
+}
+
+// ---- enumerating entries for a given group/month ----
 
 export interface MonthEntry {
+  group_id: string;
   date: string;
   contributor: string;
   caption: string;
+  location: LocationInfo | null;
   absPath: string;
   relPath: string;
 }
 
-export function listEntriesForMonth(year: number, month: number): MonthEntry[] {
-  const monthDir = resolve(entriesDir(), String(year), String(month).padStart(2, "0"));
+export function listEntriesForMonth(groupId: string, year: number, month: number): MonthEntry[] {
+  const monthDir = resolve(entriesDir(), groupId, String(year), String(month).padStart(2, "0"));
   if (!existsSync(monthDir)) return [];
   const out: MonthEntry[] = [];
   const days = readdirSync(monthDir).filter((d) => /^\d{2}$/.test(d)).sort();
   for (const dayStr of days) {
     const dayDirPath = join(monthDir, dayStr);
     if (!statSync(dayDirPath).isDirectory()) continue;
-    const contribDirs = readdirSync(dayDirPath).sort();
-    for (const c of contribDirs) {
+    for (const c of readdirSync(dayDirPath).sort()) {
       const cPath = join(dayDirPath, c);
       if (!statSync(cPath).isDirectory()) continue;
-      const files = readdirSync(cPath);
-      const images = files.filter((f) => /\.(jpe?g|png|webp)$/i.test(f)).sort();
+      const images = readdirSync(cPath)
+        .filter((f) => /\.(jpe?g|png|webp)$/i.test(f))
+        .sort();
       const captionPath = join(cPath, "caption.txt");
       const caption = existsSync(captionPath) ? readFileSync(captionPath, "utf8").trim() : "";
+      const location = readLocation(cPath);
       for (const img of images) {
         out.push({
+          group_id: groupId,
           date: `${year}-${String(month).padStart(2, "0")}-${dayStr}`,
           contributor: c,
           caption,
+          location,
           absPath: join(cPath, img),
-          relPath: `entries/${year}/${String(month).padStart(2, "0")}/${dayStr}/${c}/${img}`,
+          relPath: `entries/${groupId}/${year}/${String(month).padStart(2, "0")}/${dayStr}/${c}/${img}`,
         });
       }
     }
