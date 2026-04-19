@@ -5,11 +5,11 @@ import { repoRoot } from "./config.ts";
 // ---- on-disk layout helpers ----
 
 export function entriesDir(): string {
-  return resolve(repoRoot(), "entries");
+  return resolve(process.env.KINSFOLK_ENTRIES_DIR ?? resolve(repoRoot(), "entries"));
 }
 
 export function stateDir(): string {
-  const d = resolve(repoRoot(), "state");
+  const d = resolve(process.env.KINSFOLK_STATE_DIR ?? resolve(repoRoot(), "state"));
   if (!existsSync(d)) mkdirSync(d, { recursive: true });
   return d;
 }
@@ -76,15 +76,18 @@ export interface ReminderState {
   // key is `${date}:${telegram_id}`, value is ISO sent time
   today_reminders: Record<string, string>;
   yesterday_escalations: Record<string, string>;
-  monthly_sent: Record<string, string>; // key is `${year}-${month}`
+  monthly_sent: Record<string, string>;       // key is `${year}-${month}`
+  monthly_alerts: Record<string, string>;     // key is `${year}-${month}`, set when we flagged a missing send
 }
 const REM_PATH = () => join(stateDir(), "reminders.json");
 export function loadReminders(): ReminderState {
-  return readJson<ReminderState>(REM_PATH(), {
-    today_reminders: {},
-    yesterday_escalations: {},
-    monthly_sent: {},
-  });
+  const loaded = readJson<Partial<ReminderState>>(REM_PATH(), {});
+  return {
+    today_reminders: loaded.today_reminders ?? {},
+    yesterday_escalations: loaded.yesterday_escalations ?? {},
+    monthly_sent: loaded.monthly_sent ?? {},
+    monthly_alerts: loaded.monthly_alerts ?? {},
+  };
 }
 export function saveReminders(s: ReminderState): void {
   writeJson(REM_PATH(), s);

@@ -12,6 +12,8 @@
     "reminder": "tsx scripts/send-reminder.ts",
     "miss-check": "tsx scripts/check-misses.ts",
     "journal": "tsx scripts/send-journal.ts",
+    "verify-journal": "tsx scripts/verify-journal-sent.ts",
+    "smoke": "tsx scripts/smoke.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
