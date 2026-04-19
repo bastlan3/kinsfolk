@@ -1,0 +1,57 @@
+name: Monthly journal
+
+on:
+  schedule:
+    # Hourly on day 1. Script acts only at 09:00 Paris.
+    - cron: "0 * 1 * *"
+  # Allow manual send for testing; set force=1 to bypass date/hour guards.
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force send even if not day 1 / hour 9"
+        required: false
+        default: "0"
+
+concurrency:
+  group: kinsfolk-mutate-state
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Build and send journal
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          FORCE: ${{ inputs.force || '0' }}
+        run: npm run journal
+
+      - name: Commit send-record state
+        run: |
+          git config user.name "kinsfolk-bot"
+          git config user.email "kinsfolk-bot@users.noreply.github.com"
+          git add state
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          git commit -m "chore(journal): $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && \
+              git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((2 ** i))
+          done
+          exit 1

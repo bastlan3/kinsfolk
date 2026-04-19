@@ -1,0 +1,52 @@
+name: Poll Telegram
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub's cron is best-effort on the free tier —
+    # real cadence is often 10-15 min under load. Close enough.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: kinsfolk-mutate-state
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Poll Telegram and save photos
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: npm run poll
+
+      - name: Commit new entries and state
+        run: |
+          git config user.name "kinsfolk-bot"
+          git config user.email "kinsfolk-bot@users.noreply.github.com"
+          git add entries state
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          git commit -m "chore(poll): ingest $(date -u +%Y-%m-%dT%H:%MZ)"
+          # Rebase-pull guards against races with other scheduled jobs.
+          for i in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && \
+              git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((2 ** i))
+          done
+          echo "push failed after retries" >&2
+          exit 1
